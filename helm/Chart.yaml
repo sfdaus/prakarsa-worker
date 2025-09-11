@@ -1,0 +1,12 @@
+apiVersion: v2
+name: prakarsa-worker
+description: Helm chart for deploying Prakarsa Worker Service
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Prakarsa Team
+    email: prakarsaapp@gmail.com
+keywords:
+  - prakarsa
+  - prakarsa-worker

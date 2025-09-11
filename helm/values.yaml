@@ -1,0 +1,21 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/sfdaus/prakarsa-worker
+  tag: "latest"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  hostname: "worker.prakarsa.id"
+  certResolver: le
+  className: traefik
+
+imagePullSecrets:
+  name: ghcr-secret
+
+secretName: prakarsa-worker-env
