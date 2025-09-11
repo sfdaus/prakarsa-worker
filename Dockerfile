@@ -16,7 +16,7 @@ COPY . .
 RUN go mod tidy
 
 # Build the application
-RUN go build -o binary cmd/api/main.go
+RUN go build -o binary cmd/worker/main.go
 
 # The lightweight scratch image we'll run our application within
 FROM alpine:latest
