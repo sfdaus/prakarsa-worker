@@ -2,21 +2,20 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"prakarsa-app/config"
-	"prakarsa-app/infrastructure/datastore"
-	"prakarsa-app/usecase"
 	"prakarsa-app/utils"
+	"syscall"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
-	echoSwagger "github.com/swaggo/echo-swagger"
-	httpDelivery "prakarsa-app/delivery/http"
-	pgsqlRepository "prakarsa-app/repository/pgsql"
-	redisRepository "prakarsa-app/repository/redis"
+	httpdelivery "prakarsa-app/delivery/http"
+	"prakarsa-app/infrastructure/datastore"
+	"prakarsa-app/repository"
+	"prakarsa-app/transport/clients"
+	"prakarsa-app/worker"
+	"prakarsa-app/worker/handlers"
 )
 
 // @title Go Boilerplate
@@ -26,52 +25,31 @@ import (
 // @in header
 // @name Authorization
 func main() {
-	// Load config
 	configApp := config.LoadConfig()
 
-	// Setup infra
-	dbInstance, err := datastore.NewDatabase(configApp.DatabaseURL)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	db, err := datastore.MustOpen(configApp.DatabaseURL)
 	utils.PanicIfNeeded(err)
 
-	cacheInstance, err := datastore.NewCache(configApp.CacheURL)
-	utils.PanicIfNeeded(err)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", httpdelivery.HealthHandler(db))
+	srv := &http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 2 * time.Second}
+	go func() { _ = srv.ListenAndServe() }()
+	defer srv.Shutdown(context.Background())
 
-	// Setup repository
-	redisRepo := redisRepository.NewRedisRepository(cacheInstance)
-	workerRepo := pgsqlRepository.NewPgsqlReferenceRepository(dbInstance)
+	notif := clients.NewNotifClient(configApp.NotificationServiceURL)
+	repo := repository.NewOutboxRepo(db)
 
-	// Setup usecase
-	ctxTimeout := time.Duration(configApp.ContextTimeout) * time.Second
-	workerUC := usecase.NewReferenceUsecase(workerRepo, redisRepo, ctxTimeout)
-
-	// Setup route engine & middleware
-	e := echo.New()
-	e.Use(middleware.CORS())
-	e.Logger.Info("🚀 Server is alive and running")
-
-	// Setup handler
-	e.GET("/swagger/*", echoSwagger.WrapHandler)
-	e.GET("/", func(c echo.Context) error {
-		return c.NoContent(http.StatusOK)
-	})
-
-	httpDelivery.NewReferenceHandler(e, workerUC)
-
-	// Start server
-	go func() {
-		if err := e.Start(":8080"); err != nil && err != http.ErrServerClosed {
-			e.Logger.Fatal("shutting down the server")
-		}
-	}()
-
-	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 10 seconds.
-	// Use a buffered channel to avoid missing signals as recommended for signal.Notify
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
-	<-quit
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(configApp.ContextTimeout)*time.Second)
-	defer cancel()
-	if err := e.Shutdown(ctx); err != nil {
-		e.Logger.Fatal(err)
+	runner := &worker.Runner{
+		Repo:  repo,
+		H:     handlers.NewNotifApproved(notif),
+		Batch: 50,
+		Idle:  2 * time.Second,
 	}
+	if err := runner.Start(ctx); err != nil {
+		log.Println("runner stopped:", err)
+	}
+
 }
