@@ -13,7 +13,7 @@ func MustOpen(databaseURL string) (db *sql.DB, err error) {
 	parseDBUrl, _ := url.Parse(databaseURL)
 	db, err = sql.Open(parseDBUrl.Scheme, databaseURL)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	db.SetMaxOpenConns(10)
@@ -23,7 +23,7 @@ func MustOpen(databaseURL string) (db *sql.DB, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
-		return
+		return nil, err
 	}
 	return
 }
