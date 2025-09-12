@@ -28,6 +28,7 @@ func (h *NotifApproved) Handle(ctx context.Context, r repository.Row) error {
 		ReferenceID:   r.RefID,
 		Title:         r.Title,
 		Message:       r.Message,
+		Priority:      r.Priority,
 		Headers:       hdr,
 	})
 }
