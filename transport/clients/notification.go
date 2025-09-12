@@ -33,19 +33,24 @@ func NewNotifClient(baseURL string) *NotifClient {
 
 func (c *NotifClient) Send(ctx context.Context, n CreateNotification) error {
 	b, _ := json.Marshal(n)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/api/v1/notifications", bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/api/v1/notifications", bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
+
+	uid := n.Headers["x-user-id"]
+	if uid == "" {
+		return fmt.Errorf("missing required header x-user-id")
+	}
 
 	for k, v := range n.Headers {
 		req.Header.Set(k, v)
-		if k == "x-user-id" && v == "" {
-			return fmt.Errorf("missing required header: x-user-id")
-		}
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("do request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {

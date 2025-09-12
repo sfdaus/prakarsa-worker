@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -43,7 +44,14 @@ func (r *Runner) Start(ctx context.Context) error {
 		for _, it := range items {
 			<-sem
 			go func(row repository.Row) {
-				defer func() { sem <- struct{}{} }()
+				defer func() {
+					if rec := recover(); rec != nil {
+						log.Printf("[worker] panic id=%s: %v", row.ID, rec)
+						_ = r.Repo.MarkRetry(ctx, row.ID, fmt.Sprint(rec))
+					}
+					sem <- struct{}{}
+				}()
+
 				if err := r.H.Handle(ctx, row); err == nil {
 					if e := r.Repo.MarkSent(ctx, row.ID); e != nil {
 						log.Printf("[worker] mark sent err id=%s: %v", row.ID, e)
