@@ -20,6 +20,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	for i := 0; i < r.H.Concurrency(); i++ {
 		sem <- struct{}{}
 	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -27,27 +28,33 @@ func (r *Runner) Start(ctx context.Context) error {
 		default:
 		}
 
-		rows, err := r.Repo.PullPending(ctx, r.Batch)
+		items, err := r.Repo.ClaimPending(ctx, r.Batch)
 		if err != nil {
-			log.Printf("pull error: %v", err)
+			log.Printf("[worker] claim error: %v", err)
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		if len(rows) == 0 {
+		if len(items) == 0 {
 			time.Sleep(r.Idle)
 			continue
 		}
+		log.Printf("[worker] claimed %d notifications", len(items))
 
-		for _, row := range rows {
+		for _, it := range items {
 			<-sem
 			go func(row repository.Row) {
 				defer func() { sem <- struct{}{} }()
 				if err := r.H.Handle(ctx, row); err == nil {
-					_ = r.Repo.MarkSent(ctx, row.ID)
+					if e := r.Repo.MarkSent(ctx, row.ID); e != nil {
+						log.Printf("[worker] mark sent err id=%s: %v", row.ID, e)
+					}
 				} else {
-					_ = r.Repo.MarkRetry(ctx, row.ID, err.Error())
+					log.Printf("[worker] send err id=%s: %v", row.ID, err)
+					if e := r.Repo.MarkRetry(ctx, row.ID, err.Error()); e != nil {
+						log.Printf("[worker] mark retry err id=%s: %v", row.ID, e)
+					}
 				}
-			}(row)
+			}(it)
 		}
 	}
 }
