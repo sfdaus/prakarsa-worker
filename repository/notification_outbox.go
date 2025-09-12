@@ -16,6 +16,7 @@ type Row struct {
 	Message      string
 	HeadersJSON  json.RawMessage
 	AttemptCount int
+	Priority     string
 }
 
 type OutboxRepo struct{ DB *sql.DB }
@@ -38,7 +39,7 @@ func (r *OutboxRepo) ClaimPending(ctx context.Context, limit int) ([]Row, error)
     FROM pick
     WHERE n.id = pick.id
     RETURNING n.id, n.user_id, n.type, n.reference_type, n.reference_id,
-              n.title, n.message, n.headers_json, n.attempt_count;
+              n.title, n.message, n.headers_json, n.attempt_count, n.priority
   `, limit)
 	if err != nil {
 		return nil, err
@@ -49,7 +50,7 @@ func (r *OutboxRepo) ClaimPending(ctx context.Context, limit int) ([]Row, error)
 	for rows.Next() {
 		var rRow Row
 		if err := rows.Scan(&rRow.ID, &rRow.UserID, &rRow.Type, &rRow.RefType, &rRow.RefID,
-			&rRow.Title, &rRow.Message, &rRow.HeadersJSON, &rRow.AttemptCount); err != nil {
+			&rRow.Title, &rRow.Message, &rRow.HeadersJSON, &rRow.AttemptCount, &rRow.Priority); err != nil {
 			return nil, err
 		}
 		out = append(out, rRow)
@@ -68,12 +69,13 @@ func (r *OutboxRepo) MarkSent(ctx context.Context, id string) error {
 
 func (r *OutboxRepo) MarkRetry(ctx context.Context, id string, errMsg string) error {
 	_, err := r.DB.ExecContext(ctx, `
-    UPDATE notification_outbox
-    SET attempt_count = attempt_count + 1,
-        next_attempt_at = NOW() + make_interval(mins => LEAST(POWER(2, attempt_count+1), 60)),
-        status='pending',
-        error_message = left($2, 500)
-    WHERE id=$1
-  `, id, errMsg)
+				UPDATE notification_outbox
+				SET attempt_count = attempt_count + 1,
+					-- backoff: 1m,2m,4m.. capped 60m
+					next_attempt_at = NOW() + (LEAST(POWER(2, (attempt_count+1))::int, 60)) * INTERVAL '1 minute',
+					status='pending',
+					error_message = left($2, 500)
+				WHERE id=$1
+				`, id, errMsg)
 	return err
 }
