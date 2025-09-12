@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"prakarsa-app/repository"
 	"prakarsa-app/transport/clients"
 	"prakarsa-app/worker"
@@ -15,7 +16,11 @@ func (h *NotifApproved) Name() string     { return "notif.thread_application_app
 func (h *NotifApproved) Concurrency() int { return 8 }
 
 func (h *NotifApproved) Handle(ctx context.Context, r repository.Row) error {
-	hdr := worker.ParseHeaders(r.HeadersJSON)
+	hdr := worker.ParseHeaders(r.HeadersJSON) // map[string]string
+	// sanity check
+	if hdr["x-user-id"] == "" {
+		return fmt.Errorf("missing x-user-id header")
+	}
 	return h.Client.Send(ctx, clients.CreateNotification{
 		UserID:        r.UserID,
 		Type:          r.Type,
