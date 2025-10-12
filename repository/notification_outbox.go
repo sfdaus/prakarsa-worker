@@ -17,7 +17,7 @@ type Row struct {
 	HeadersJSON  json.RawMessage
 	AttemptCount int
 	Priority     string
-	ActionURL    string
+	ActionURL    sql.NullString
 }
 
 type OutboxRepo struct{ DB *sql.DB }

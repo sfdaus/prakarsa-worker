@@ -21,7 +21,8 @@ func (h *NotifApproved) Handle(ctx context.Context, r repository.Row) error {
 	if hdr["x-user-id"] == "" {
 		return fmt.Errorf("missing x-user-id header")
 	}
-	return h.Client.Send(ctx, clients.CreateNotification{
+
+	payload := clients.CreateNotification{
 		UserID:        r.UserID,
 		Type:          r.Type,
 		ReferenceType: r.RefType,
@@ -30,6 +31,11 @@ func (h *NotifApproved) Handle(ctx context.Context, r repository.Row) error {
 		Message:       r.Message,
 		Priority:      r.Priority,
 		Headers:       hdr,
-		ActionURL:     r.ActionURL,
-	})
+	}
+
+	if r.ActionURL.Valid {
+		payload.ActionURL = r.ActionURL.String
+	}
+
+	return h.Client.Send(ctx, payload)
 }
