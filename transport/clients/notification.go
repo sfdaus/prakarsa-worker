@@ -18,6 +18,7 @@ type CreateNotification struct {
 	Message       string            `json:"message"`
 	Headers       map[string]string `json:"headers,omitempty"`
 	Priority      string            `json:"priority"`
+	ActionURL     string            `json:"action_url"`
 }
 
 type NotifClient struct {

@@ -17,6 +17,7 @@ type Row struct {
 	HeadersJSON  json.RawMessage
 	AttemptCount int
 	Priority     string
+	ActionURL    string
 }
 
 type OutboxRepo struct{ DB *sql.DB }
@@ -39,7 +40,7 @@ func (r *OutboxRepo) ClaimPending(ctx context.Context, limit int) ([]Row, error)
     FROM pick
     WHERE n.id = pick.id
     RETURNING n.id, n.user_id, n.type, n.reference_type, n.reference_id,
-              n.title, n.message, n.headers_json, n.attempt_count, n.priority
+              n.title, n.message, n.headers_json, n.attempt_count, n.priority, n.action_url
   `, limit)
 	if err != nil {
 		return nil, err
@@ -50,7 +51,7 @@ func (r *OutboxRepo) ClaimPending(ctx context.Context, limit int) ([]Row, error)
 	for rows.Next() {
 		var rRow Row
 		if err := rows.Scan(&rRow.ID, &rRow.UserID, &rRow.Type, &rRow.RefType, &rRow.RefID,
-			&rRow.Title, &rRow.Message, &rRow.HeadersJSON, &rRow.AttemptCount, &rRow.Priority); err != nil {
+			&rRow.Title, &rRow.Message, &rRow.HeadersJSON, &rRow.AttemptCount, &rRow.Priority, &rRow.ActionURL); err != nil {
 			return nil, err
 		}
 		out = append(out, rRow)
