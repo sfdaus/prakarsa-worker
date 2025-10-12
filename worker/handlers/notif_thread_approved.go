@@ -30,5 +30,6 @@ func (h *NotifApproved) Handle(ctx context.Context, r repository.Row) error {
 		Message:       r.Message,
 		Priority:      r.Priority,
 		Headers:       hdr,
+		ActionURL:     r.ActionURL,
 	})
 }
